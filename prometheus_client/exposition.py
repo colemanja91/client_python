@@ -95,16 +95,23 @@ class MetricsHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
+class HttpServerReuseSocket(HTTPServer):
+    """ HTTP server that will allow for the socket to be reused
+        so the server can start up again, even if there was a previous
+         instance that ended abruptly.
+    """
+
+    def server_bin(self):
+        HTTPServer.server_bind(self)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
 
 def start_http_server(port, addr=''):
     """Starts an HTTP server for prometheus metrics as a daemon thread"""
-    class ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
-        def server_bin(self):
-            HTTPServer.server_bind(self)
-            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    httpd = HttpServerReuseSocket((addr, port), MetricsHandler)
     class PrometheusMetricsServer(threading.Thread):
         def run(self):
-            httpd = ThreadingSimpleServer((addr, port), MetricsHandler)
+            httpd = HTTPServer((addr, port), MetricsHandler)
             httpd.serve_forever()
     t = PrometheusMetricsServer()
     t.daemon = True
